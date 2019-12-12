@@ -57,8 +57,6 @@ function getLocation(request, response) {
 function checkDuplicate(handler, tableName, fieldName) {
   const SQL = `SELECT * FROM ${tableName} WHERE ${fieldName}=$1`;
   const values = [handler.query];
-  console.log('values :', values)
-  console.log('handler :', handler)
   return client.query( SQL, values )
     .then(results => {
       if(results.rowCount > 0) {
