@@ -18,14 +18,6 @@ client.connect();
 
 
 // API routes
-app.get('/', (request,response) => {
-  const SQL = 'SELECT * FROM locations;';
-  client.query(SQL).then(sqlResponse => {
-    // console.log('sqlResponse :', sqlResponse);
-    response.send(sqlResponse.rows);
-  });
-});
-
 app.get('/location', getLocation);
 
 app.get('/weather', getWeather);
@@ -44,45 +36,57 @@ function Location(city, geoData){
 }
 
 // Route Handler
-function getLocation(request,response) {
-  console.log('!!!!!!!!!!!!!!!getLocation');
+function getLocation(request, response) {
   const locationHandler = {
     query: request.query.data,
+    // if there is data existing
     cacheHit: (results) => {
-      console.log('******Got data from SQL');
+      // console.log('results :', results);
       response.send(results.rows[0]);
     },
+    // if there is no data existing
     cacheMiss: () => {
-      Location.fetchLocation(request.query.data)
+      fetchLocation(request.query.data)
         .then(data => response.send(data));
     },
   };
-  console.log('*********locationHandler :', locationHandler);
-  Location.lookupLocation(locationHandler);
+  lookupLocation(locationHandler);
 }
 
 // Lookup a location in the DB and invoke the proper callback methods based on what you find
-Location.lookupLocation = (handler) => {
-  console.log('!!!!!!!!!!!!!!!lookupLocation');
+function lookupLocation(handler) {
   const SQL = `SELECT * FROM locations WHERE search_query=$1`;
   const values = [handler.query];
-
   return client.query( SQL, values )
-    .then( results => {
-      if( results.rowCount > 0 ) {
+    .then(results => {
+      if(results.rowCount > 0) {
+        // if there is data existing
         handler.cacheHit(results);
       }
       else {
+        // if there is no data existing
         handler.cacheMiss();
       }
     })
-    .catch( console.error );
+    .catch(console.error);
+}
 
-};
+
+function fetchLocation(query) {
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEOCODE_API_KEY}`;
+  return superagent.get(url).then(data => {
+    let location = new Location(query, data.body.results[0]);
+    return location.save().then(
+      result => {
+        location.id = result.rows[0].id;
+        return location;
+      }
+    )
+  })
+}
 
 // Save a location to the DB
 Location.prototype.save = function() {
-  console.log('!!!!!!!!!!!!!!!SAVE LOCATION TO Q');
   let SQL = `
     INSERT INTO locations
       (search_query,formatted_query,latitude,longitude) 
@@ -94,36 +98,78 @@ Location.prototype.save = function() {
 };
 
 
+// ******** WEATHER **********
 
-Location.fetchLocation = (query) => {
-  console.log('!!!!!!!!!!!!!!!fetchLocation');
-  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEOCODE_API_KEY}`;
+function Weather(weatherData){
+  this.forecast = weatherData.summary;
+  this.time = weatherData.time;
+}
+
+function getWeather(request, response) {
+  const weatherHandler = {
+    query: request.query.data,
+    // if there is data existing
+    cacheHit: (results) => {
+      // console.log('results :', results);
+      response.send(results.rows[0]);
+    },
+    // if there is no data existing
+    cacheMiss: () => {
+      fetchWeather(request.query.data)
+        .then(data => response.send(data));
+    },
+  };
+  lookupWeather(weatherHandler);
+}
+
+function lookupWeather(handler) {
+  const SQL = `SELECT * FROM weathers WHERE forecast=$1`;
+  const values = [handler.query];
+  return client.query( SQL, values )
+    .then(results => {
+      if(results.rowCount > 0) {
+        // if there is data existing
+        handler.cacheHit(results);
+      }
+      else {
+        // if there is no data existing
+        handler.cacheMiss();
+      }
+    })
+    .catch(console.error);
+}
+
+function fetchWeather(query) {
+  const url = `https://api.darksky.net/forecast/${process.env.WEATHER_API_KEY}/${query.latitude},${query.longitude}`;
   return superagent.get(url).then(data => {
-    let location = new Location(query, data.body.results[0]);
-    console.log('******location :', location);
-    return location.save().then(
+    console.log('******data :', data.body.daily);
+    let weather = new Weather(data.body.daily.data[0]);
+    return weather.save().then(
       result => {
-        location.id = result.rows[0].id;
-        return location;
+        weather.id = result.rows[0].id;
+        return weather;
       }
     )
   })
 }
 
+// Save a location to the DB
+Weather.prototype.save = function() {
+  let SQL = `
+    INSERT INTO weathers
+      (forecast,time) 
+      VALUES($1,$2) 
+      RETURNING id
+  `;
+  let values = Object.values(this);
+  return client.query(SQL,values);
+};
 
 
 
 
 
-
-
-
-
-
-function Weather(forecast, time){
-  this.forecast = forecast;
-  this.time = time;
-}
+// ******** EVENT **********
 
 function Event(link, name, event_date, summary){
   this.link = link;
@@ -132,21 +178,6 @@ function Event(link, name, event_date, summary){
   this.summary = summary;
 }
 
-function getWeather(request, response) {
-  const url = `https://api.darksky.net/forecast/${process.env.WEATHER_API_KEY}/${request.query.data.latitude},${request.query.data.longitude}`;
-  superagent.get(url).then(data => {
-    // console.log('WeatherDATA : ', data.body.daily.data);
-    const weatherData = data.body.daily.data.map(obj => {
-      let forecast = obj.summary;
-      let formattedTime = new Date(obj.time * 1000).toDateString();
-      return new Weather(forecast, formattedTime);
-    })
-    response.status(200).send(weatherData);
-  }).catch(err => {
-    console.error(err);
-    response.status(500).send('Status 500: Internal Server Error');
-  });
-}
 
 function getEventBrite(request, response) {
   const url = `http://api.eventful.com/json/events/search?location=${request.query.data.formatted_query}&app_key=${process.env.EVENTBRITE_API_KEY}`;
