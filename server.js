@@ -19,9 +19,7 @@ client.connect();
 
 // API routes
 app.get('/location', getLocation);
-
 app.get('/weather', getWeather);
-
 app.get('/events', getEventBrite);
 
 app.listen(PORT, () => {
@@ -37,6 +35,8 @@ function Location(city, geoData){
 
 // Route Handler
 function getLocation(request, response) {
+  const tableName = 'locations';
+  const fieldName = 'search_query';
   const locationHandler = {
     query: request.query.data,
     // if there is data existing
@@ -50,13 +50,15 @@ function getLocation(request, response) {
         .then(data => response.send(data));
     },
   };
-  lookupLocation(locationHandler);
+  checkDuplicate(locationHandler, tableName, fieldName);
 }
 
-// Lookup a location in the DB and invoke the proper callback methods based on what you find
-function lookupLocation(handler) {
-  const SQL = `SELECT * FROM locations WHERE search_query=$1`;
+
+function checkDuplicate(handler, tableName, fieldName) {
+  const SQL = `SELECT * FROM ${tableName} WHERE ${fieldName}=$1`;
   const values = [handler.query];
+  console.log('values :', values)
+  console.log('handler :', handler)
   return client.query( SQL, values )
     .then(results => {
       if(results.rowCount > 0) {
@@ -76,7 +78,7 @@ function fetchLocation(query) {
   const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEOCODE_API_KEY}`;
   return superagent.get(url).then(data => {
     let location = new Location(query, data.body.results[0]);
-    return location.save().then(
+    return location.saveDB().then(
       result => {
         location.id = result.rows[0].id;
         return location;
@@ -86,7 +88,7 @@ function fetchLocation(query) {
 }
 
 // Save a location to the DB
-Location.prototype.save = function() {
+Location.prototype.saveDB = function() {
   let SQL = `
     INSERT INTO locations
       (search_query,formatted_query,latitude,longitude) 
@@ -106,6 +108,8 @@ function Weather(weatherData){
 }
 
 function getWeather(request, response) {
+  const tableName = 'weathers';
+  const fieldName = 'forest';
   const weatherHandler = {
     query: request.query.data,
     // if there is data existing
@@ -119,30 +123,14 @@ function getWeather(request, response) {
         .then(data => response.send(data));
     },
   };
-  lookupWeather(weatherHandler);
+  checkDuplicate(weatherHandler, tableName, fieldName);
 }
 
-function lookupWeather(handler) {
-  const SQL = `SELECT * FROM weathers WHERE forecast=$1`;
-  const values = [handler.query];
-  return client.query( SQL, values )
-    .then(results => {
-      if(results.rowCount > 0) {
-        // if there is data existing
-        handler.cacheHit(results);
-      }
-      else {
-        // if there is no data existing
-        handler.cacheMiss();
-      }
-    })
-    .catch(console.error);
-}
 
 function fetchWeather(query) {
   const url = `https://api.darksky.net/forecast/${process.env.WEATHER_API_KEY}/${query.latitude},${query.longitude}`;
   return superagent.get(url).then(data => {
-    console.log('******data :', data.body.daily);
+    // console.log('******data :', data.body.daily);
     let weather = new Weather(data.body.daily.data[0]);
     return weather.save().then(
       result => {
