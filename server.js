@@ -21,12 +21,13 @@ client.connect();
 app.get('/location', getLocation);
 app.get('/weather', getWeather);
 app.get('/events', getEventBrite);
+app.get('/yelp', getYelp);
 
 app.listen(PORT, () => {
   console.log(`Listening on ${PORT}`);
 });
 
-function Location(city, geoData){
+function Location(city, geoData) {
   this.search_query = city;
   this.formatted_query = geoData.formatted_address;
   this.latitude = geoData.geometry.location.lat;
@@ -57,9 +58,9 @@ function getLocation(request, response) {
 function checkDuplicate(handler, tableName, fieldName) {
   const SQL = `SELECT * FROM ${tableName} WHERE ${fieldName}=$1`;
   const values = [handler.query];
-  return client.query( SQL, values )
+  return client.query(SQL, values)
     .then(results => {
-      if(results.rowCount > 0) {
+      if (results.rowCount > 0) {
         // if there is data existing
         handler.cacheHit(results);
       }
@@ -86,7 +87,7 @@ function fetchLocation(query) {
 }
 
 // Save a location to the DB
-Location.prototype.saveDB = function() {
+Location.prototype.saveDB = function () {
   let SQL = `
     INSERT INTO locations
       (search_query,formatted_query,latitude,longitude) 
@@ -94,62 +95,45 @@ Location.prototype.saveDB = function() {
       RETURNING id
   `;
   let values = Object.values(this);
-  return client.query(SQL,values);
+  return client.query(SQL, values);
 };
 
 
 // ******** WEATHER **********
 
-function Weather(weatherData){
+function Weather(weatherData) {
   this.forecast = weatherData.summary;
-  this.time = weatherData.time;
+  this.time = new Date(weatherData.time  * 1000).toDateString();
 }
 
 function getWeather(request, response) {
-  const tableName = 'weathers';
-  const fieldName = 'forest';
-  const weatherHandler = {
-    query: request.query.data,
-    // if there is data existing
-    cacheHit: (results) => {
-      // console.log('results :', results);
-      response.send(results.rows[0]);
-    },
-    // if there is no data existing
-    cacheMiss: () => {
-      fetchWeather(request.query.data)
-        .then(data => response.send(data));
-    },
-  };
-  checkDuplicate(weatherHandler, tableName, fieldName);
-}
+  superagent.get(`https://api.darksky.net/forecast/${process.env.WEATHER_API_KEY}/${request.query.data.latitude},${request.query.data.longitude}`).then(res => {
+    
+    let dailyData = res.body.daily.data;
+    
+    let nextForecast = dailyData.map( (val, index, array) => {
+      let nextForeCastObj = new Weather(val);
+      return nextForeCastObj;
+    });
+    response.send(nextForecast);
+  });
+};
 
+/* 
 
 function fetchWeather(query) {
   const url = `https://api.darksky.net/forecast/${process.env.WEATHER_API_KEY}/${query.latitude},${query.longitude}`;
-  return superagent.get(url).then(data => {
-    // console.log('******data :', data.body.daily);
-    let weather = new Weather(data.body.daily.data[0]);
-    return weather.save().then(
-      result => {
-        weather.id = result.rows[0].id;
-        return weather;
-      }
-    )
-  })
-}
+  superagent.get(url).then(weatherdata => {
+    
+    let data = weatherdata.body.daily.data.forEach( val => {
+      
+      let nextWeatherData = new Weather(val);
+      console.log(nextWeatherData);
+    });
+    response.status(200).send(data);
+  });
+} */
 
-// Save a location to the DB
-Weather.prototype.save = function() {
-  let SQL = `
-    INSERT INTO weathers
-      (forecast,time) 
-      VALUES($1,$2) 
-      RETURNING id
-  `;
-  let values = Object.values(this);
-  return client.query(SQL,values);
-};
 
 
 
@@ -157,7 +141,7 @@ Weather.prototype.save = function() {
 
 // ******** EVENT **********
 
-function Event(link, name, event_date, summary){
+function Event(link, name, event_date, summary) {
   this.link = link;
   this.name = name;
   this.event_date = event_date;
@@ -180,6 +164,42 @@ function getEventBrite(request, response) {
   }).catch(err => {
     console.error(err);
     response.status(500).send('Status 500: Internal Server Error');
+  })  
+}
+
+function yelpRestaurant(name, img, price, rating, url) {
+  this.name = name;
+  this.image_url = img;
+  this.price = price;
+  this.rating = rating;
+  this.url = url;
+}
+
+
+function getYelp(request, response) {
+  const url = `https://api.yelp.com/v3/businesses/search?term="restaurants"&location="${request.query.data.formatted_query}"`;
+  
+  superagent.get(url).set('Authorization', 'BEARER vovF9nM3NY1B2vvynkDkJvJona07uQk5t---0cZ5nRZGSx754R2LzJnOzHn25u2N31xiBioHBe7QV8fB5ybwmPIRWUX2OLaRoDGcJZnkZlID8cOf_oXVumCRLMrzXXYx').then(data => {
+
+    const yelpJSON = JSON.parse(data.text);
+    const restaurantArray = yelpJSON.businesses;
+
+    const restaurantData = restaurantArray.map( value => {
+
+      let restaurantName = value.name;
+      let restaurantImg = value.image_url;
+      let restaurantPrice = value.price;
+      let restaurantRating = value.rating;
+      let restaurantURL = value.url;
+      
+      let nextRestaurant = new yelpRestaurant(restaurantName, restaurantImg, restaurantPrice, restaurantRating, restaurantURL);
+      return nextRestaurant;
+    });
+    
+    response.status(200).send(restaurantData);
+  }).catch(err => {
+    //console.error(err);
+    //response.status(500).send('Status 500: Internal Server Error');
   })
 }
 
