@@ -1,39 +1,32 @@
 'use strict';
-
 const express = require('express');
 const superagent = require('superagent');
 const cors = require('cors');
 const pg = require('pg');
-
 require('dotenv').config();
-
 const PORT = process.env.PORT || 3000;
 const app = express();
 app.use(cors());
-
 // Database set up
 const client = new pg.Client(process.env.DATABASE_URL);
 client.on('error', error => console.error(error));
 client.connect();
-
-
+ 
 // API routes
 app.get('/location', getLocation);
 app.get('/weather', getWeather);
 app.get('/events', getEventBrite);
 app.get('/yelp', getYelp);
-
+app.get('/movies', getMovies);
 app.listen(PORT, () => {
   console.log(`Listening on ${PORT}`);
 });
-
 function Location(city, geoData) {
   this.search_query = city;
   this.formatted_query = geoData.formatted_address;
   this.latitude = geoData.geometry.location.lat;
   this.longitude = geoData.geometry.location.lng;
 }
-
 // Route Handler
 function getLocation(request, response) {
   const tableName = 'locations';
@@ -53,8 +46,6 @@ function getLocation(request, response) {
   };
   checkDuplicate(locationHandler, tableName, fieldName);
 }
-
-
 function checkDuplicate(handler, tableName, fieldName) {
   const SQL = `SELECT * FROM ${tableName} WHERE ${fieldName}=$1`;
   const values = [handler.query];
@@ -71,8 +62,6 @@ function checkDuplicate(handler, tableName, fieldName) {
     })
     .catch(console.error);
 }
-
-
 function fetchLocation(query) {
   const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEOCODE_API_KEY}`;
   return superagent.get(url).then(data => {
@@ -85,7 +74,6 @@ function fetchLocation(query) {
     )
   })
 }
-
 // Save a location to the DB
 Location.prototype.saveDB = function () {
   let SQL = `
@@ -97,15 +85,11 @@ Location.prototype.saveDB = function () {
   let values = Object.values(this);
   return client.query(SQL, values);
 };
-
-
 // ******** WEATHER **********
-
 function Weather(weatherData) {
   this.forecast = weatherData.summary;
   this.time = new Date(weatherData.time  * 1000).toDateString();
 }
-
 function getWeather(request, response) {
   superagent.get(`https://api.darksky.net/forecast/${process.env.WEATHER_API_KEY}/${request.query.data.latitude},${request.query.data.longitude}`).then(res => {
     
@@ -118,37 +102,13 @@ function getWeather(request, response) {
     response.send(nextForecast);
   });
 };
-
-/* 
-
-function fetchWeather(query) {
-  const url = `https://api.darksky.net/forecast/${process.env.WEATHER_API_KEY}/${query.latitude},${query.longitude}`;
-  superagent.get(url).then(weatherdata => {
-    
-    let data = weatherdata.body.daily.data.forEach( val => {
-      
-      let nextWeatherData = new Weather(val);
-      console.log(nextWeatherData);
-    });
-    response.status(200).send(data);
-  });
-} */
-
-
-
-
-
-
 // ******** EVENT **********
-
 function Event(link, name, event_date, summary) {
   this.link = link;
   this.name = name;
   this.event_date = event_date;
   this.summary = summary;
 }
-
-
 function getEventBrite(request, response) {
   const url = `http://api.eventful.com/json/events/search?location=${request.query.data.formatted_query}&app_key=${process.env.EVENTBRITE_API_KEY}`;
   superagent.get(url).then(data => {
@@ -166,7 +126,6 @@ function getEventBrite(request, response) {
     response.status(500).send('Status 500: Internal Server Error');
   })  
 }
-
 function yelpRestaurant(name, img, price, rating, url) {
   this.name = name;
   this.image_url = img;
@@ -174,18 +133,13 @@ function yelpRestaurant(name, img, price, rating, url) {
   this.rating = rating;
   this.url = url;
 }
-
-
 function getYelp(request, response) {
   const url = `https://api.yelp.com/v3/businesses/search?term="restaurants"&location="${request.query.data.formatted_query}"`;
   
-  superagent.get(url).set('Authorization', 'BEARER vovF9nM3NY1B2vvynkDkJvJona07uQk5t---0cZ5nRZGSx754R2LzJnOzHn25u2N31xiBioHBe7QV8fB5ybwmPIRWUX2OLaRoDGcJZnkZlID8cOf_oXVumCRLMrzXXYx').then(data => {
-
+  superagent.get(url).set('Authorization', `BEARER ${process.env.YELP_API_KEY}`).then(data => {
     const yelpJSON = JSON.parse(data.text);
     const restaurantArray = yelpJSON.businesses;
-
     const restaurantData = restaurantArray.map( value => {
-
       let restaurantName = value.name;
       let restaurantImg = value.image_url;
       let restaurantPrice = value.price;
@@ -198,9 +152,37 @@ function getYelp(request, response) {
     
     response.status(200).send(restaurantData);
   }).catch(err => {
-    //console.error(err);
-    //response.status(500).send('Status 500: Internal Server Error');
-  })
+    console.error(err);
+    response.status(500).send('Status 500: Internal Server Error');
+  });
 }
-
-
+function Movie(title, overview, avg_votes, tot_votes, img_url, popularity, release) {
+  this.title = title;
+  this.overview = overview;
+  this.average_votes = avg_votes;
+  this.total_votes = tot_votes;
+  this.image_url = img_url;
+  this.popularity = popularity;
+  this.released_on = release;
+}
+function getMovies(request, response) {
+  const getCityName = `${request.query.data.formatted_query}`.split(',')[0];
+  
+  const url = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIE_API_KEY}&language=en-US&query=${getCityName}&page=1&include_adult=false`;
+  
+  superagent.get(url).then(data => {
+    let movieArray = data.body.results;
+    let movieData = movieArray.map( val => {
+      let title = val.title;
+      let overview = val.overview;
+      let avgVotes = val.vote_average;
+      let totVotes = val.vote_count;
+      let imgURL = 'https://image.tmdb.org/t/p/w500' + val.poster_path;
+      let popularity = val.popularity;
+      let release = val.relase_date;
+      let nextMovie = new Movie(title, overview, avgVotes, totVotes, imgURL, popularity, release);
+      return nextMovie;
+    });
+    response.send(movieData);
+  });
+}
