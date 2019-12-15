@@ -2,35 +2,35 @@
 
 const superagent = require('superagent');
 
-function Movie(title, overview, avg_votes, tot_votes, img_url, popularity, release) {
-  this.title = title;
-  this.overview = overview;
-  this.average_votes = avg_votes;
-  this.total_votes = tot_votes;
-  this.image_url = img_url;
-  this.popularity = popularity;
-  this.released_on = release;
+// Creates a movie with state readable by front-end app
+function Movie(movieData) {
+
+  this.title = movieData.title;
+  this.overview = movieData.overview;
+  this.average_votes = movieData.vote_average;
+  this.total_votes = movieData.vote_count;
+  this.image_url = 'https://image.tmdb.org/t/p/w500' + movieData.poster_path;
+  this.popularity = movieData.popularity;
+  this.released_on = movieData.relase_date;
 }
 
+// Takes user's location input and sends an array of movie data to front-end app
 function getMovies(request, response) {
+
+  // Uses user's input and formats for API endpoint
   const getCityName = `${request.query.data.formatted_query}`.split(',')[0];
 
+  // API endpoint -- Uses location supplied from user's input
   const url = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIE_API_KEY}&language=en-US&query=${getCityName}&page=1&include_adult=false`;
 
-  superagent.get(url).then(data => {
-    let movieArray = data.body.results;
-    let movieData = movieArray.map(val => {
-      let title = val.title;
-      let overview = val.overview;
-      let avgVotes = val.vote_average;
-      let totVotes = val.vote_count;
-      let imgURL = 'https://image.tmdb.org/t/p/w500' + val.poster_path;
-      let popularity = val.popularity;
-      let release = val.relase_date;
-      let nextMovie = new Movie(title, overview, avgVotes, totVotes, imgURL, popularity, release);
-      return nextMovie;
-    });
-    response.send(movieData);
+  // Process data from endpoint request and create array of Movie objects.  Sends that array to front-end app
+  superagent.get(url).then(dataFromEndpoint => {
+
+    let movieArray = dataFromEndpoint.body.results;
+
+    let movieDataToServer = movieArray.map(movieData => new Movie(movieData));
+
+    response.send(movieDataToServer);
   });
 }
 

@@ -9,12 +9,12 @@ const app = express();
 app.use(cors());
 
 // local module dependencies
-const trails = require('./modules/trail');
-const movies = require('./modules/movies');
-const yelp = require('./modules/yelp');
-const events = require('./modules/event');
-const weather = require('./modules/weather');
 const locations = require('./modules/locations');
+const weather = require('./modules/weather');
+const events = require('./modules/event');
+const yelp = require('./modules/yelp');
+const movies = require('./modules/movies');
+const trails = require('./modules/trail');
 
 // API routes
 app.get('/location', locations.getLocation);

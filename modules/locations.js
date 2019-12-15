@@ -2,11 +2,13 @@
 
 const superagent = require('superagent');
 
+// postgres DB dependencies
 const pg = require('pg');
 const client = new pg.Client(process.env.DATABASE_URL);
 client.on('error', error => console.error(error));
 client.connect();
 
+// creates location suitable for front-end app
 function Location(city, geoData) {
   this.search_query = city;
   this.formatted_query = geoData.formatted_address;

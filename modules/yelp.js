@@ -2,32 +2,32 @@
 
 const superagent = require('superagent');
 
-function yelpRestaurant(name, img, price, rating, url) {
-  this.name = name;
-  this.image_url = img;
-  this.price = price;
-  this.rating = rating;
-  this.url = url;
+// Creates a yelpRestaurant with state readable by front-end app
+function yelpRestaurant(reviewData) {
+  this.name = reviewData.name;
+  this.image_url = reviewData.image_url;
+  this.price = reviewData.price;
+  this.rating = reviewData.rating;
+  this.url = reviewData.url;
 }
 
+// Takes user's location input and sends an array of trail data to front-end app
 function getYelp(request, response) {
+
+  // API endpoint -- Uses coordinates supplied from user's input
   const url = `https://api.yelp.com/v3/businesses/search?term="restaurants"&location="${request.query.data.formatted_query}"`;
 
-  superagent.get(url).set('Authorization', `BEARER ${process.env.YELP_API_KEY}`).then(data => {
-    const yelpJSON = JSON.parse(data.text);
-    const restaurantArray = yelpJSON.businesses;
-    const restaurantData = restaurantArray.map(value => {
-      let restaurantName = value.name;
-      let restaurantImg = value.image_url;
-      let restaurantPrice = value.price;
-      let restaurantRating = value.rating;
-      let restaurantURL = value.url;
+  // Process data from endpoint request and create array of yelp restuarant objects.  Sends that array to front-end app
+  superagent.get(url).set('Authorization', `BEARER ${process.env.YELP_API_KEY}`).then(dataFromEndpoint => {
 
-      let nextRestaurant = new yelpRestaurant(restaurantName, restaurantImg, restaurantPrice, restaurantRating, restaurantURL);
-      return nextRestaurant;
-    });
+    const yelpJSON = JSON.parse(dataFromEndpoint.text);
+
+    const restaurantArray = yelpJSON.businesses;
+
+    const restaurantData = restaurantArray.map(reviewData => new yelpRestaurant(reviewData));
 
     response.status(200).send(restaurantData);
+
   }).catch(err => {
     console.error(err);
     response.status(500).send('Status 500: Internal Server Error');

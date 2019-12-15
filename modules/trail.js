@@ -2,47 +2,35 @@
 
 const superagent = require('superagent');
 
-function Trail(name, locationName, length, stars, votes, summary, url, conditions, conditions_date, condition_time) {
-  this.name = name;
-  this.location = locationName;
-  this.length = length;
-  this.stars = stars;
-  this.star_votes = votes;
-  this.summary = summary;
-  this.trail_url = url;
-  this.conditions = conditions;
-  this.conditions_date = conditions_date;
-  this.conditions_time = condition_time;
+// Creates a trail with state readable by front-end app
+function Trail(trailData) {
 
+  this.name = trailData.name;
+  this.location = trailData.location;
+  this.length = trailData.length;
+  this.stars = trailData.stars;
+  this.star_votes = trailData.starVotes;
+  this.summary = trailData.summary;
+  this.trail_url = trailData.url;
+  this.conditions = trailData.conditionStatus;
+  this.conditions_date = trailData.conditionDate;
+  this.conditions_time = trailData.conditionDetails;
 }
 
+// Takes user's location input and sends an array of trail data to front-end app
 function getTrails(request, response) {
 
-  const url = `https://www.hikingproject.com/data/get-trails?lat=${request.query.data.latitude}&lon=${request.query.data.longitude}&key=${process.env.
-    TRAIL_API_KEY}`;
+  // API endpoint -- Uses coordinates supplied from user's input
+  const url = `https://www.hikingproject.com/data/get-trails?lat=${request.query.data.latitude}&lon=${request.query.data.longitude}&key=${process.env.TRAIL_API_KEY}`;
 
-  superagent.get(url).then(data => {
+  // Process data from endpoint request and create array of Trail objects.  Sends that array to front-end app
+  superagent.get(url).then(dataFromEndpoint => {
 
-    let trailArray = data.body.trails;
+    let trailArray = dataFromEndpoint.body.trails;
 
-    let trailData = trailArray.map(value => {
-      
-      let name = value.name;
-      let location = value.location;
-      let length = value.length;
-      let stars = value.stars;
-      let star_votes = value.starVotes;
-      let summary = value.summary;
-      let trail_url = value.url;
-      let conditions = value.conditionStatus;
-      let conditions_date = value.conditionDate;
-      let conditions_time = value.conditionDetails;
+    let trailDataToServer = trailArray.map(trailData => new Trail(trailData));
 
-      let nextTrail = new Trail(name, location, length, stars, star_votes, summary, trail_url, conditions, conditions_date, conditions_time);
-
-      return nextTrail;
-    });
-    response.send(trailData);
+    response.send(trailDataToServer);
   });
 }
 
